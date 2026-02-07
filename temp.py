@@ -2,44 +2,44 @@
 from agent.loop import run_agent
 
 TEST_TASKS = [
-    # Task 1: Dataset overview
-    "Give me a summary of the dataset",
+    # 1️⃣ Ambiguous on purpose (should ASK which dataset)
+    "Give me a summary of the dataset named sample.csv" ,
 
-    # Task 2: Column introspection
-    "What columns are present in the dataset?",
+    # 2️⃣ Explicit filename (should WORK)
+    "Give me a summary of sample.csv",
 
-    # Task 3: Row count
-    "How many rows are in the data?",
+    # 3️⃣ Explicit filename + columns
+    "What columns are present in sample.csv?",
 
-    # Task 4: Missing values
-    "Are there any missing values?",
+    # 4️⃣ Row count
+    "How many rows are in sample.csv?",
 
-    # Task 5: Column-specific reasoning
-    "What can you tell me about the age column?",
+    # 5️⃣ Missing values
+    "Are there any missing values in sample.csv?",
 
-    # Task 6: Conditional reasoning
-    "How many students passed?",
+    # 6️⃣ Column reasoning
+    "What can you tell me about the age column in sample.csv?",
 
-    # Task 7: Slightly evil question (honest fallback)
-    "Is there any relationship between age and score?"
+    # 7️⃣ Honest limitation test (should NOT hallucinate)
+    "Is there any relationship between age and score in sample.csv?"
 ]
 
 
 def run_tests():
-    print("=" * 70)
-    print("PHASE 1.2 — DATA AGENT SANDBOX TEST")
-    print("=" * 70)
+    print("=" * 75)
+    print("PHASE 1.2 — DATA AGENT (EXPLICIT DATASET SELECTION TEST)")
+    print("=" * 75)
 
     for i, task in enumerate(TEST_TASKS, start=1):
         print(f"\n🧪 TASK {i}")
-        print("-" * 70)
+        print("-" * 75)
         print(f"PROMPT: {task}")
-        print("-" * 70)
+        print("-" * 75)
 
         try:
             result = run_agent(
                 goal=task,
-                chat_context="Testing data analysis capabilities",
+                chat_context="Testing data agent with explicit dataset selection",
                 max_steps=5
             )
 
@@ -50,7 +50,7 @@ def run_tests():
             print("❌ ERROR OCCURRED")
             print(e)
 
-        print("-" * 70)
+        print("-" * 75)
 
 
 if __name__ == "__main__":

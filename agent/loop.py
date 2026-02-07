@@ -19,35 +19,36 @@ def decide_action(step: str) -> tuple[str, str]:
     """
 
     messages = [
-            {
-                "role": "system",
-                "content": """You are an action selector for an AI agent.
+        {
+            "role": "system",
+            "content": """You are an action selector for an AI agent.
 
-        Available tools:
-        - file_qa: use ONLY when the step requires reading, searching, or extracting information
-        from local text-based files or indexed documents.
-        - data_agent: use for ANY step that involves datasets, tables, CSV files, JSON files,
-        rows, columns, counts, statistics, missing values, trends, comparisons, or analysis.
-        - coding: use ONLY when the step requires summarizing, transforming, explaining, or
-        restructuring text WITHOUT using external files or datasets.
+            Available tools:
+            - file_qa: use ONLY when the step requires reading, searching, or extracting information
+            from local text-based files or indexed documents.
+            - data_agent: use for ANY step that involves datasets, tables, CSV files, JSON files,
+            rows, columns, counts, statistics, missing values, trends, comparisons, or analysis.
+            - coding: use ONLY when the step requires summarizing, transforming, explaining, or
+            restructuring text WITHOUT using external files or datasets.
 
-        CRITICAL RULES:
-        1. If the step involves data, datasets, CSV, tables, rows, columns, statistics,
-        counts, averages, missing values, trends, or analysis, you MUST select data_agent.
-        2. You are NOT allowed to answer data-related steps without using data_agent.
-        3. Select exactly ONE tool.
-        4. Base your decision strictly on the meaning of the step.
-        5. Do NOT invent new tools.
-        6. Do NOT explain your choice.
-        7. Respond ONLY in the format:
-        tool_name | input_text
-        """
-            },
-            {
-                "role": "user",
-                "content": step
-            }
+            CRITICAL RULES:
+            1. If the step involves data, datasets, CSV, tables, rows, columns, statistics,
+            counts, averages, missing values, trends, or analysis, you MUST select data_agent.
+            2. You are NOT allowed to answer data-related steps without using data_agent.
+            3. Select exactly ONE tool.
+            4. Base your decision strictly on the meaning of the step.
+            5. Do NOT invent new tools.
+            6. Do NOT explain your choice.
+            7. Respond ONLY in the format:
+            tool_name | input_text
+            """
+        },
+        {
+            "role": "user",
+            "content": step
+        }
     ]
+
     response = chat(messages)
 
     # Parse response safely
@@ -58,11 +59,13 @@ def decide_action(step: str) -> tuple[str, str]:
     tool = tool.strip().lower()
     text = text.strip()
 
-    # Final safety fallback
-    if tool not in ("file_qa", "coding"):
+    # ✅ FIXED safety fallback
+    if tool not in ("file_qa", "coding", "data_agent"):
         tool = "coding"
 
+
     return tool, text
+
 
 def goal_satisfied(goal: str, observations: list[str]) -> bool:
     messages = [
@@ -89,14 +92,14 @@ def synthesize_answer(goal: str, observations: list[str], chat_context: str = ""
         {
             "role": "system",
             "content": (
-                "You are an AI assistant responsible for producing the FINAL answer.\n\n"
-                "Rules:\n"
-                "1. Answer the goal directly and concisely.\n"
-                "2. Focus on conceptual understanding and clarity.\n"
-                "3. Do NOT include code unless the goal explicitly asks for code.\n"
-                "4. Ignore implementation details, libraries, or algorithms unless requested.\n"
-                "5. Do NOT mention tools, steps, or intermediate processing.\n"
-                "6. Produce a clean, human-readable response.\n"
+                "You are producing the FINAL answer.\n\n"
+                "CRITICAL RULES:\n"
+                "1. You MUST use ONLY the provided observations.\n"
+                "2. Do NOT reinterpret numbers or values.\n"
+                "3. Do NOT infer missing values from zeros.\n"
+                "4.If an observation line exists, repeat it VERBATIM. Do not paraphrase.\n"
+                "5. If information is missing, say 'Not available'.\n"
+                "6. NEVER add new facts.\n"
             )
         },
         {
@@ -162,9 +165,10 @@ def compress_for_memory(final_answer: str) -> str:
     return chat(messages)
 
 def run_agent(goal: str, chat_context: str = "",max_steps: int = 5, on_log=None) -> AgentResult:
+    final_answer = ""
     state = AgentState(goal=goal)
     logs: list[str] = []
-
+    ...
     # helper to emit logs (CLI + GUI)
     def emit(message: str):
         logs.append(message)
@@ -181,6 +185,18 @@ def run_agent(goal: str, chat_context: str = "",max_steps: int = 5, on_log=None)
     state.steps = plan_steps(contextual_goal)
     emit(f"🎯 Goal: {goal}")
 
+    # Detect if this goal requires data analysis
+    data_keywords = [
+        "dataset", "csv", "json", "table",
+        "rows", "columns", "missing",
+        "statistics", "summary", "count",
+        "average", "relationship", "correlation"
+    ]
+
+    force_data_agent = any(k in goal.lower() for k in data_keywords)
+
+
+    # LOOP
     # LOOP
     for _ in range(max_steps):
         step = state.next_step()
@@ -190,20 +206,43 @@ def run_agent(goal: str, chat_context: str = "",max_steps: int = 5, on_log=None)
         emit(f"➡️ Step: {step}")
 
         tool, input_text = decide_action(step)
+
+        # 🔒 HARD LOCK
+        if force_data_agent:
+            tool = "data_agent"
+
         emit(f"🛠️ Using tool: {tool}")
 
         result = run_tool(tool, input_text)
         state.observations.append(result)
 
-        # Check if goal already satisfied
+        emit(f"📄 Result: {result[:200]}")
+
         if goal_satisfied(state.goal, state.observations):
             emit("🧠 Goal satisfied early.")
             break
 
-        emit(f"📄 Result: {result[:200]}")
 
-    # FINAL SYNTHESIS
-    final_answer = synthesize_answer(state.goal, state.observations, chat_context)
+    # ✅ FINAL SYNTHESIS — ONCE
+   # ✅ For data tasks, only use the LAST data_agent observation
+    observations_for_synthesis = state.observations
+
+    if force_data_agent:
+        # keep only the last observation (authoritative data snapshot)
+        observations_for_synthesis = [state.observations[-1]]
+
+    final_answer = synthesize_answer(
+        state.goal,
+        observations_for_synthesis,
+        chat_context
+    )
+
+
+    return {
+        "final_answer": final_answer,
+        "logs": logs
+    }
+
 
     # MEMORY POLISH + DEBUG VISIBILITY
     def classify_memory_type(goal: str, final_answer: str) -> str:

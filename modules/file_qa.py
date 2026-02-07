@@ -21,5 +21,9 @@ def get_embedding_model():
     return _model
 
 def handle_file_qa(query: str) -> str:
+    if query.lower().endswith(".csv") or "csv" in query.lower():
+     return "ERROR: CSV files must be handled by data_agent only."
+
+    
     return handle_local_file(query)
 
