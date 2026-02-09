@@ -5,3 +5,4 @@ data/
 venv/
 __pycache__/
 temp.py
+browser_profile/
