@@ -1,15 +1,14 @@
 from modules.file_qa import handle_file_qa
 from modules.coding import handle_coding
-from modules.file_qa import handle_local_file
-from modules.coding import handle_coding
 from modules.data_agent import handle_data_analysis
-
+from modules.web_browse import handle_browse
 
 
 TOOLS = {
     "file_qa": handle_file_qa,
     "coding": handle_coding,
-    "data_agent": handle_data_analysis
+    "data_agent": handle_data_analysis,
+    "browse": handle_browse,
 }
 
 def run_tool(tool_name: str, input_text: str) -> str:

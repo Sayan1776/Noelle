@@ -41,3 +41,31 @@ def recall_facts() -> str:
 def recall_preferences() -> str:
     memory = load_memory()
     return "\n".join(f"- {m}" for m in memory["preferences"])
+
+# --- Public memory API used by the agent ---
+
+def add_memory(entry: str):
+    """
+    Default memory write.
+    For now, treat generic 'remember' as a fact.
+    """
+    add_fact(entry)
+
+def recall_memory() -> str:
+    """
+    Default memory recall.
+    Returns both facts and preferences.
+    """
+    facts = recall_facts()
+    prefs = recall_preferences()
+
+    if not facts and not prefs:
+        return "I don't have anything saved yet."
+
+    out = []
+    if facts:
+        out.append("Facts:\n" + facts)
+    if prefs:
+        out.append("Preferences:\n" + prefs)
+
+    return "\n\n".join(out)

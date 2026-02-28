@@ -6,6 +6,13 @@ def route(user_input: str) -> str:
         "shutdown", "restart"
     ]
 
+    browse_keywords = [
+        "browse", "search online", "go to", "open website",
+        "look up", "google", "amazon", "flipkart",
+        "find online", "website", "url", "web search",
+        "search for", "search on", "visit"
+    ]
+
     file_keywords = [
         "summarize", "summary", "notes",
         "pdf", "document", "file", "read"
@@ -21,6 +28,11 @@ def route(user_input: str) -> str:
         "code", "function", "class", "exception",
         "optimize", "why does", "fix this"
     ]
+
+    # Check browse BEFORE system (since "open website" would match system's "open")
+    for phrase in browse_keywords:
+        if phrase in text:
+            return "BROWSE"
 
     for word in system_keywords:
         if word in text:

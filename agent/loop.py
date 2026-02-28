@@ -30,16 +30,20 @@ def decide_action(step: str) -> tuple[str, str]:
             rows, columns, counts, statistics, missing values, trends, comparisons, or analysis.
             - coding: use ONLY when the step requires summarizing, transforming, explaining, or
             restructuring text WITHOUT using external files or datasets.
+            - browse: use when the step requires opening a website, searching the web, browsing
+            online, looking up products, visiting URLs, or any internet-related task.
 
             CRITICAL RULES:
             1. If the step involves data, datasets, CSV, tables, rows, columns, statistics,
             counts, averages, missing values, trends, or analysis, you MUST select data_agent.
-            2. You are NOT allowed to answer data-related steps without using data_agent.
-            3. Select exactly ONE tool.
-            4. Base your decision strictly on the meaning of the step.
-            5. Do NOT invent new tools.
-            6. Do NOT explain your choice.
-            7. Respond ONLY in the format:
+            2. If the step involves websites, URLs, searching online, browsing, or web pages,
+            you MUST select browse.
+            3. You are NOT allowed to answer data-related steps without using data_agent.
+            4. Select exactly ONE tool.
+            5. Base your decision strictly on the meaning of the step.
+            6. Do NOT invent new tools.
+            7. Do NOT explain your choice.
+            8. Respond ONLY in the format:
             tool_name | input_text
             """
         },
@@ -59,8 +63,8 @@ def decide_action(step: str) -> tuple[str, str]:
     tool = tool.strip().lower()
     text = text.strip()
 
-    # ✅ FIXED safety fallback
-    if tool not in ("file_qa", "coding", "data_agent"):
+    # Safety fallback
+    if tool not in ("file_qa", "coding", "data_agent", "browse"):
         tool = "coding"
 
 
@@ -164,11 +168,33 @@ def compress_for_memory(final_answer: str) -> str:
 
     return chat(messages)
 
-def run_agent(goal: str, chat_context: str = "",max_steps: int = 5, on_log=None) -> AgentResult:
+
+def classify_memory_type(goal: str, final_answer: str) -> str:
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "Classify the following information.\n\n"
+                "Respond with ONLY one word:\n"
+                "FACT – stable, reusable knowledge\n"
+                "PREFERENCE – user preference or behavioral bias\n"
+                "IGNORE – temporary or task-specific\n"
+            )
+        },
+        {
+            "role": "user",
+            "content": f"Goal:\n{goal}\n\nAnswer:\n{final_answer}"
+        }
+    ]
+
+    return chat(messages).strip().upper()
+
+
+def run_agent(goal: str, chat_context: str = "", max_steps: int = 5, on_log=None) -> AgentResult:
     final_answer = ""
     state = AgentState(goal=goal)
     logs: list[str] = []
-    ...
+
     # helper to emit logs (CLI + GUI)
     def emit(message: str):
         logs.append(message)
@@ -193,10 +219,15 @@ def run_agent(goal: str, chat_context: str = "",max_steps: int = 5, on_log=None)
         "average", "relationship", "correlation"
     ]
 
+    browse_keywords = [
+        "browse", "website", "search online", "google",
+        "amazon", "flipkart", "url", "web", "open site",
+        "look up online", "find online", "visit"
+    ]
+
     force_data_agent = any(k in goal.lower() for k in data_keywords)
+    force_browse = any(k in goal.lower() for k in browse_keywords)
 
-
-    # LOOP
     # LOOP
     for _ in range(max_steps):
         step = state.next_step()
@@ -207,9 +238,11 @@ def run_agent(goal: str, chat_context: str = "",max_steps: int = 5, on_log=None)
 
         tool, input_text = decide_action(step)
 
-        # 🔒 HARD LOCK
+        # 🔒 HARD LOCKS
         if force_data_agent:
             tool = "data_agent"
+        elif force_browse:
+            tool = "browse"
 
         emit(f"🛠️ Using tool: {tool}")
 
@@ -223,8 +256,7 @@ def run_agent(goal: str, chat_context: str = "",max_steps: int = 5, on_log=None)
             break
 
 
-    # ✅ FINAL SYNTHESIS — ONCE
-   # ✅ For data tasks, only use the LAST data_agent observation
+    # ✅ FINAL SYNTHESIS
     observations_for_synthesis = state.observations
 
     if force_data_agent:
@@ -237,34 +269,7 @@ def run_agent(goal: str, chat_context: str = "",max_steps: int = 5, on_log=None)
         chat_context
     )
 
-
-    return {
-        "final_answer": final_answer,
-        "logs": logs
-    }
-
-
-    # MEMORY POLISH + DEBUG VISIBILITY
-    def classify_memory_type(goal: str, final_answer: str) -> str:
-        messages = [
-        {
-        "role": "system",
-        "content": (
-        "Classify the following information.\n\n"
-        "Respond with ONLY one word:\n"
-        "FACT – stable, reusable knowledge\n"
-        "PREFERENCE – user preference or behavioral bias\n"
-        "IGNORE – temporary or task-specific\n"
-        )
-        },
-        {
-        "role": "user",
-        "content": f"Goal:\n{goal}\n\nAnswer:\n{final_answer}"
-        }
-        ]
-
-
-        return chat(messages).strip().upper()
+    # MEMORY POLISH
     memory_type = classify_memory_type(state.goal, final_answer)
 
     if memory_type == "FACT":
@@ -275,6 +280,7 @@ def run_agent(goal: str, chat_context: str = "",max_steps: int = 5, on_log=None)
         emit("💾 Stored preference.")
     else:
         emit("💾 Memory ignored.")
+
     emit("✅ Agent finished.")
     emit("📌 Final Answer:")
     emit(final_answer)

@@ -6,3 +6,7 @@ venv/
 __pycache__/
 temp.py
 browser_profile/
+amazon_debug.png
+temp_action.py
+temp_browser.py
+temp_capabilities.py
